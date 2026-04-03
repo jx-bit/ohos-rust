@@ -1,0 +1,103 @@
+# ohos-rust
+
+本项目为 OpenHarmony 平台编译了 rust，并发布预构建包。
+
+## 获取预构建包
+
+前往 [release 页面](https://github.com/Harmonybrew/ohos-rust/releases) 获取。
+
+## 用法
+
+**1\. 在鸿蒙 PC 中使用**
+
+在 HiShell 中用 curl 下载这个软件包，然后以"解压 + 配 PATH" 的方式使用。
+
+示例：
+```sh
+cd ~
+curl -fLO https://github.com/Harmonybrew/ohos-rust/releases/download/1.89.0/rust-1.89.0-ohos-arm64.tar.gz
+tar -zxf rust-1.89.0-ohos-arm64.tar.gz
+export PATH=~/rust-1.89.0-ohos-arm64/bin:$PATH
+
+# 现在可以使用 rust 命令了
+```
+
+**2\. 在鸿蒙开发板中使用**
+
+用 hdc 把它推到设备上，然后以"解压 + 配 PATH" 的方式使用。
+
+示例：
+```sh
+hdc file send rust-1.89.0-ohos-arm64.tar.gz /data
+hdc shell
+
+cd /data
+tar -zxf rust-1.89.0-ohos-arm64.tar.gz
+export PATH=/data/rust-1.89.0-ohos-arm64/bin:$PATH
+
+# 现在可以使用 rust 命令了
+```
+
+**3\. 在 [鸿蒙容器](https://github.com/hqzing/dockerharmony) 中使用**
+
+在容器中用 curl 下载这个软件包，然后以"解压 + 配 PATH" 的方式使用。
+
+示例：
+```sh
+cd /opt
+curl -fLO https://github.com/Harmonybrew/ohos-rust/releases/download/1.89.0/rust-1.89.0-ohos-arm64.tar.gz
+tar -zxf rust-1.89.0-ohos-arm64.tar.gz
+export PATH=/opt/rust-1.89.0-ohos-arm64/bin:$PATH
+
+# 现在可以使用 rust 命令了
+```
+
+## 从源码构建
+
+**1\. 手动构建**
+
+这个项目使用本地编译（native compilation，也可以叫本机编译或原生编译）的做法来编译鸿蒙版 rust，而不是交叉编译。
+
+需要在 [鸿蒙容器](https://github.com/hqzing/dockerharmony) 中运行项目里的 build.sh，以实现 rust 的本地编译。
+
+示例：
+```sh
+git clone https://github.com/Harmonybrew/ohos-rust.git
+cd ohos-rust
+docker run \
+  --rm \
+  -it \
+  -v "$PWD":/workdir \
+  -w /workdir \
+  ghcr.io/hqzing/dockerharmony:latest \
+  ./build.sh
+```
+
+**2\. 使用流水线构建**
+
+如果你熟悉 GitHub Actions，你可以直接复用项目内的工作流配置，使用 GitHub 的流水线来完成构建。
+
+这种情况下，你使用的是 GitHub 提供的构建机，不需要自己准备构建环境。
+
+只需要这么做，你就可以进行你的个人构建：
+1. Fork 本项目，生成个人仓
+2. 在个人仓的"Actions"菜单里面启用工作流
+3. 在个人仓提交代码或发版本，触发流水线运行
+
+## 常见问题
+
+**1\. 部分 cargo crates 无法正常使用**
+
+本项目并没有对 rust 进行任何"鸿蒙适配"处理，仅仅是使用 ohos-sdk 进行了简单的重编译，它的业务逻辑是走 aarch64-linux-musl 平台的业务逻辑，下载的 crates（主要指包含 C 依赖的 crates）也是 aarch64-linux-musl 的 crates。
+
+基于鸿蒙对 Linux 的兼容性，很多 crates 是可以正常工作的。但并非所有 crates 都能被完美兼容，不可避免会遇到一些不能正常工作的 crates，这个表现是预期之内的。
+
+**2\. 软件包不能做到完全便携**
+
+rust 这个软件本身的设计没有刻意去实现 portable/relocatable，它编出来的制品里面有一些地方硬编码了编译时的 prefix，它会根据这个 prefix 去读取各种文件。如果软件的实际使用位置和 prefix 不一致，就有可能会产生一些预期之外的表现。
+
+在基础的使用场景下，这个问题不会暴露出来，即使软件的实际使用位置和 prefix 不一致，我们也能正常使用 rustc、cargo 等命令。但在深度的使用场景下就很容易遇到这方面的问题。
+
+如果你遇到了这方面的问题，有两种处理方案：
+1. 将软件包放置到 prefix 目录下使用。本项目编包的时候设置的 prefix 是 /opt/rust-1.89.0-ohos-arm64。
+2. 自己重新编一个包，将 prefix 设置成你期望的安装路径。
