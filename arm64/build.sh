@@ -136,6 +136,10 @@ curl -fLO https://static.rust-lang.org/dist/rustc-$RUST_VERSION-src.tar.gz
 tar -zxf rustc-$RUST_VERSION-src.tar.gz
 cd rustc-$RUST_VERSION-src
 
+# 应用 patches
+echo "=== 应用 patches ==="
+patch -p1 < $WORKDIR/patches/0001-rustc-ohos-auto-sign-fix-1.89.0.patch
+
 # ========================================
 # 设置 stage0 预构建工具链
 # 使用官方构建产物作为 stage0，避免重新编译
@@ -250,14 +254,26 @@ cd $WORKDIR
 # ========================================
 # 提取主要的 Rust 分发包
 # ========================================
-mkdir -p /opt/rust-$RUST_VERSION-ohos-arm64
-tar -xf rustc-$RUST_VERSION-src/build/dist/rust-$RUST_VERSION-aarch64-unknown-linux-ohos.tar.gz -C /opt/rust-$RUST_VERSION-ohos-arm64 --strip-components=1
+echo "=== 查找 tar.gz 文件 ==="
+find rustc-$RUST_VERSION-src/build/dist/ -name "*.tar.gz" || echo "没有找到 tar.gz 文件"
 
-# 复制依赖库到 Rust 目录
+# 调用 install.sh 安装到临时目录
+echo "RUST_INSTALL_DIR=/tmp/rust-install"
+export RUST_INSTALL_DIR="/tmp/rust-install"
+rm -rf "$RUST_INSTALL_DIR"
+mkdir -p "$RUST_INSTALL_DIR"
+
+echo "=== 安装 rustc ==="
+cd rustc-$RUST_VERSION-src/build/dist/rust-$RUST_VERSION-aarch64-unknown-linux-ohos
+sh install.sh --destdir="$RUST_INSTALL_DIR" --verbose
+
+echo "=== 复制依赖库到安装目录 ==="
+cp /opt/deps/lib/*so* "$RUST_INSTALL_DIR/lib/"
 cp /opt/deps/lib/*so* /opt/rust-$RUST_VERSION-ohos-arm64/lib
 
 # 进行代码签名
-cd /opt/rust-$RUST_VERSION-ohos-arm64
+echo "=== 代码签名 ==="
+cd "$RUST_INSTALL_DIR"
 find . -type f \( -perm -0111 -o -name "*.so*" \) | while read FILE; do
     if file -b "$FILE" | grep -iqE "elf|sharedlib|ELF|shared object"; then
         echo "Signing binary file $FILE"
@@ -269,30 +285,32 @@ done
 cd $WORKDIR
 
 # 履行开源义务，把使用的开源软件的 license 全部聚合起来放到制品中
-cat <<EOF > /opt/rust-$RUST_VERSION-ohos-arm64/licenses.txt
+echo "=== 生成 license 文件 ==="
+cat <<EOF > "$RUST_INSTALL_DIR/licenses.txt"
 This document describes the licenses of all software distributed with the
 bundled application.
 ==========================================================================
 
 rust
-===========
+==========
 $(cat rustc-$RUST_VERSION-src/LICENSE-MIT)
 $(cat rustc-$RUST_VERSION-src/LICENSE-APACHE)
 
 openssl
-===========
+==========
 ==license==
 $(cat deps/openssl-3.3.4/LICENSE.txt)
 ==authors==
 $(cat deps/openssl-3.3.4/AUTHORS.md)
 
 zlib
-===========
+==========
 $(cat deps/zlib-1.3.1/LICENSE)
 EOF
 
 # 打包最终产物
-cp -r /opt/rust-$RUST_VERSION-ohos-arm64 ./
+echo "=== 打包最终产物 ==="
+cp -r "$RUST_INSTALL_DIR" ./
 tar -zcf rust-$RUST_VERSION-ohos-arm64-native.tar.gz rust-$RUST_VERSION-ohos-arm64
 
 sync

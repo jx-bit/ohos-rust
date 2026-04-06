@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     xz-utils \
     unzip \
+    patch \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/ohos-sdk.sh /scripts/

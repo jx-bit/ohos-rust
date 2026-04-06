@@ -12,35 +12,35 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
-  build-arm64:
-    runs-on: ubuntu-24.04-arm
-    container:
-      image: ghcr.io/hqzing/dockerharmony:latest
-      volumes:
-        - /opt/node24:/__e/node24:rw,rshared
-    steps:
-      - name: Setup node for actions
-        run: |
-          curl -fLO https://github.com/hqzing/ohos-node/releases/download/v24.2.0/node-v24.2.0-openharmony-arm64.tar.gz
-          mkdir /__e/node24/bin
-          tar -zxf node-v24.2.0-openharmony-arm64.tar.gz -C /opt
-          ln -s /opt/node-v24.2.0-openharmony-arm64/bin/node /__e/node24/bin/node
-      - name: Checkout
-        uses: actions/checkout@v5
-      - name: Build
-        run: |
-          echo "=== ARM64 本地编译 aarch64-unknown-linux-ohos ==="
-          ./arm64/build.sh
-      - name: Upload artifact
-        uses: actions/upload-artifact@v6
-        with:
-          path: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-native.tar.gz
-          name: rust-1.89.0-ohos-arm64-native
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release'
-        with:
-          files: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-native.tar.gz
+  # build-arm64:
+  #   runs-on: ubuntu-24.04-arm
+  #   container:
+  #     image: ghcr.io/hqzing/dockerharmony:latest
+  #     volumes:
+  #       - /opt/node24:/__e/node24:rw,rshared
+  #   steps:
+  #     - name: Setup node for actions
+  #       run: |
+  #         curl -fLO https://github.com/hqzing/ohos-node/releases/download/v24.2.0/node-v24.2.0-openharmony-arm64.tar.gz
+  #         mkdir /__e/node24/bin
+  #         tar -zxf node-v24.2.0-openharmony-arm64.tar.gz -C /opt
+  #         ln -s /opt/node-v24.2.0-openharmony-arm64/bin/node /__e/node24/bin/node
+  #     - name: Checkout
+  #       uses: actions/checkout@v5
+  #     - name: Build
+  #       run: |
+  #         echo "=== ARM64 本地编译 aarch64-unknown-linux-ohos ==="
+  #         ./arm64/build.sh
+  #     - name: Upload artifact
+  #       uses: actions/upload-artifact@v6
+  #       with:
+  #         path: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-native.tar.gz
+  #         name: rust-1.89.0-ohos-arm64-native
+  #     - name: Upload release asset
+  #       uses: softprops/action-gh-release@v2
+  #       if: github.event_name == 'release'
+  #       with:
+  #         files: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-native.tar.gz
   build-x86_64:
     runs-on: ubuntu-24.04
     steps:
