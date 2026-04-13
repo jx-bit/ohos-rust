@@ -34,13 +34,13 @@ jobs:
   #     - name: Upload artifact
   #       uses: actions/upload-artifact@v6
   #       with:
-  #         path: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-native.tar.gz
-  #         name: rust-1.89.0-ohos-arm64-native
+  #         path: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+  #         name: rust-1.89.0-aarch64-unknown-linux-ohos-native
   #     - name: Upload release asset
   #       uses: softprops/action-gh-release@v2
   #       if: github.event_name == 'release'
   #       with:
-  #         files: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-native.tar.gz
+  #         files: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
   build-x86_64:
     runs-on: ubuntu-24.04
     steps:
@@ -55,10 +55,10 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          path: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-cross.tar.gz
-          name: rust-1.89.0-ohos-arm64-cross
+          path: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+          name: rust-1.89.0-aarch64-unknown-linux-ohos-cross
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'
         with:
-          files: ${{ github.workspace }}/rust-1.89.0-ohos-arm64-cross.tar.gz
+          files: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz

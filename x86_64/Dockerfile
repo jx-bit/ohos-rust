@@ -20,14 +20,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     patch \
     && rm -rf /var/lib/apt/lists/*
 
-COPY scripts/ohos-sdk.sh /scripts/
+# Fix git safe directory for CI
+RUN git config --global --add safe.directory /workspace
+
+COPY x86_64/scripts/ohos-sdk.sh /scripts/
 RUN sh /scripts/ohos-sdk.sh
 
-COPY scripts/ohos-openssl.sh /scripts/
+COPY x86_64/scripts/ohos-openssl.sh /scripts/
 RUN sh /scripts/ohos-openssl.sh
 
-COPY scripts/ohos/aarch64-unknown-linux-ohos-clang.sh /usr/local/bin/
-COPY scripts/ohos/aarch64-unknown-linux-ohos-clang++.sh /usr/local/bin/
+COPY x86_64/scripts/ohos/aarch64-unknown-linux-ohos-clang.sh /usr/local/bin/
+COPY x86_64/scripts/ohos/aarch64-unknown-linux-ohos-clang++.sh /usr/local/bin/
 
 # env
 ENV AARCH64_UNKNOWN_LINUX_OHOS_OPENSSL_DIR=/opt/ohos-openssl/prelude/arm64-v8a
@@ -51,5 +54,5 @@ ENV RUST_CONFIGURE_ARGS \
 
 ENV SCRIPT python3 ../x.py dist --host=$TARGETS --target $TARGETS
 
-COPY scripts/sccache.sh /scripts/
+COPY x86_64/scripts/sccache.sh /scripts/
 RUN sh /scripts/sccache.sh
