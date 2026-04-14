@@ -4,8 +4,10 @@ set -e
 WORKDIR=$(pwd)
 RUST_VERSION="1.89.0"
 
-# 控制选项：DRY_RUN=true 将跳过编译，直接生成模拟产物进行测试
-# 默认值为 false，即执行完整编译流程
+# ========================================
+# 构建选项（可通过环境变量覆盖）
+# ========================================
+# DRY_RUN: 跳过编译，生成模拟产物测试流程
 DRY_RUN=${DRY_RUN:-false}
 
 # 如果存在旧的目录和文件，就清理掉
@@ -58,20 +60,22 @@ if [ "$DRY_RUN" = "true" ]; then
     TARGET_NAME="rust-$RUST_VERSION-aarch64-unknown-linux-ohos"
     TARGET_DIR="$BUILD_DIST/$TARGET_NAME"
 
+    # 清理旧目录
+    rm -rf "$MOCK_DIR" "$TARGET_DIR"
+
     echo "创建目录: $MOCK_DIR"
     mkdir -p "$BUILD_DIST"
-    mkdir -p "$MOCK_DIR/usr/local/bin"
-    mkdir -p "$MOCK_DIR/usr/local/lib"
-    mkdir -p "$MOCK_DIR/usr/local/lib/rustlib/aarch64-unknown-linux-ohos/bin"
+    mkdir -p "$MOCK_DIR/bin"
+    mkdir -p "$MOCK_DIR/lib"
+    mkdir -p "$MOCK_DIR/lib/rustlib/aarch64-unknown-linux-ohos/bin"
 
     echo "复制模拟二进制文件..."
-    # 复制宿主机的 ls 程序充当 ELF 二进制文件
-    cp /bin/ls "$MOCK_DIR/usr/local/bin/cargo"
-    cp /bin/ls "$MOCK_DIR/usr/local/bin/rustc"
-    cp /bin/ls "$MOCK_DIR/usr/local/bin/rustfmt"
-    cp /bin/ls "$MOCK_DIR/usr/local/bin/clippy-driver"
-    cp /bin/ls "$MOCK_DIR/usr/local/lib/libtest.so"
-    cp /bin/ls "$MOCK_DIR/usr/local/lib/rustlib/aarch64-unknown-linux-ohos/bin/rust-lld"
+    cp /bin/ls "$MOCK_DIR/bin/cargo"
+    cp /bin/ls "$MOCK_DIR/bin/rustc"
+    cp /bin/ls "$MOCK_DIR/bin/rustfmt"
+    cp /bin/ls "$MOCK_DIR/bin/clippy-driver"
+    cp /bin/ls "$MOCK_DIR/lib/libtest.so"
+    cp /bin/ls "$MOCK_DIR/lib/rustlib/aarch64-unknown-linux-ohos/bin/rust-lld"
 
     echo "打包模拟产物..."
     # 重命名目录
@@ -80,18 +84,19 @@ if [ "$DRY_RUN" = "true" ]; then
     # 生成模拟 install.sh
     cat > "$TARGET_DIR/install.sh" << 'EOF'
 #!/bin/sh
-# 模拟安装脚本，仅将 usr 目录拷贝到 --destdir 指定的位置
-DESTDIR=""
+# 模拟安装脚本，将 bin/lib 目录拷贝到 --prefix 指定的位置
+PREFIX=""
 for arg in "$@"; do
     case "$arg" in
-        --destdir=*) DESTDIR="${arg#*=}" ;;
+        --prefix=*) PREFIX="${arg#*=}" ;;
     esac
 done
 
-if [ -n "$DESTDIR" ]; then
-    echo "Mock installing to $DESTDIR..."
-    mkdir -p "$DESTDIR"
-    cp -r usr "$DESTDIR"
+if [ -n "$PREFIX" ]; then
+    echo "Mock installing to $PREFIX..."
+    mkdir -p "$PREFIX/bin" "$PREFIX/lib"
+    cp -r bin/* "$PREFIX/bin/" 2>/dev/null || true
+    cp -r lib/* "$PREFIX/lib/" 2>/dev/null || true
     echo "Mock installation complete."
 fi
 EOF
@@ -146,15 +151,17 @@ cd rustc-$RUST_VERSION-src/build/dist/
 tar -zxf rust-$RUST_VERSION-aarch64-unknown-linux-ohos.tar.gz
 cd rust-$RUST_VERSION-aarch64-unknown-linux-ohos
 
-# - --prefix=/opt/rust → 安装到 /opt/rust/bin, /opt/rust/lib 等
-# - --destdir=/tmp/rust-install → 安装到 /tmp/rust-install/usr/local/bin, /tmp/rust-install/usr/local/lib 等（保持原有的 /usr/local 结构）
-sh install.sh --destdir="$RUST_INSTALL_DIR" --verbose
+# 直接安装到指定路径（扁平结构）
+sh install.sh --prefix="$RUST_INSTALL_DIR" --verbose
 
-echo "=== 复制 OpenSSL 依赖库到安装目录 ==="
-mkdir -p "$RUST_INSTALL_DIR/usr/local/lib"
-cp -r /opt/ohos-openssl/prelude/arm64-v8a/lib/* "$RUST_INSTALL_DIR/usr/local/lib/" 2>/dev/null || true
+echo "=== 产物位置: $RUST_INSTALL_DIR ==="
+ls -la "$RUST_INSTALL_DIR/" || echo "目录不存在"
 
-# 进行代码签名（使用 Linux x86_64 版本签名工具）
+echo "=== 复制 OpenSSL 依赖库 ==="
+mkdir -p "$RUST_INSTALL_DIR/lib"
+cp -r /opt/ohos-openssl/prelude/arm64-v8a/lib/* "$RUST_INSTALL_DIR/lib/" 2>/dev/null || true
+
+# 进行代码签名
 echo "=== 代码签名 ==="
 cd "$RUST_INSTALL_DIR"
 
@@ -167,7 +174,6 @@ fi
 chmod +x "$SIGN_TOOL"
 echo "使用签名工具: $SIGN_TOOL"
 
-# 签名所有 ELF 文件
 find . -type f | while read -r FILE; do
     if file -b "$FILE" | grep -qiE "elf"; then
         echo "Signing: $FILE"
@@ -188,7 +194,7 @@ done
 [ $? -ne 0 ] && exit 1
 cd $WORKDIR
 
-# 履行开源义务，把使用的开源软件的 license 全部聚合起来放到制品中
+# 履行开源义务
 echo "=== 生成 license 文件 ==="
 cat <<EOF > "$RUST_INSTALL_DIR/licenses.txt"
 This document describes the licenses of all software distributed with the
@@ -208,14 +214,24 @@ EOF
 
 # 打包最终产物
 echo "=== 打包最终产物 ==="
-cp -r "$RUST_INSTALL_DIR" ./rust-$RUST_VERSION-aarch64-unknown-linux-ohos
+FINAL_DIR="$WORKDIR/rust-$RUST_VERSION-aarch64-unknown-linux-ohos"
+rm -rf "$FINAL_DIR"
 
-# 将工具目录下的签名工具打包进去
-mkdir -p ./rust-$RUST_VERSION-aarch64-unknown-linux-ohos/tool
-cp $WORKDIR/tool/binary-sign-tool ./rust-$RUST_VERSION-aarch64-unknown-linux-ohos/tool/
+# 直接复制安装目录
+cp -r "$RUST_INSTALL_DIR" "$FINAL_DIR"
+
+# 将签名工具打包进去
+mkdir -p "$FINAL_DIR/tool"
+cp $WORKDIR/tool/binary-sign-tool "$FINAL_DIR/tool/"
 
 tar -zcf rust-$RUST_VERSION-aarch64-unknown-linux-ohos.tar.gz rust-$RUST_VERSION-aarch64-unknown-linux-ohos
 
 sync
 
 echo "=== 构建完成 ==="
+echo ""
+echo "构建选项汇总:"
+echo "  DRY_RUN: $DRY_RUN"
+echo ""
+echo "产物位置: $WORKDIR/rust-$RUST_VERSION-aarch64-unknown-linux-ohos.tar.gz"
+ls -lh rust-$RUST_VERSION-aarch64-unknown-linux-ohos.tar.gz

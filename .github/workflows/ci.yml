@@ -4,16 +4,24 @@ on:
   release:
     types: [published]
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'DRY_RUN mode (skip compilation, test signing only)'
+        required: false
+        default: false
+        type: boolean
 
 permissions: write-all
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 jobs:
-  # build-arm64:
+  # build-on-arm64:
   #   runs-on: ubuntu-24.04-arm
+  #   env:
+  #     FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   #   container:
   #     image: ghcr.io/hqzing/dockerharmony:latest
   #     volumes:
@@ -41,22 +49,57 @@ jobs:
   #       if: github.event_name == 'release'
   #       with:
   #         files: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
-  build-x86_64:
+  build-on-x86_64:
     runs-on: ubuntu-24.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      - name: Build Docker image
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-docker-x86_64-${{ hashFiles('x86_64/Dockerfile', 'x86_64/scripts/*.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-x86_64-
+
+      - name: Build Docker image with cache
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: x86_64/Dockerfile
+          push: false
+          load: true
+          tags: rust-ohos-x86_64
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: Move Docker cache
         run: |
-          docker build -f x86_64/Dockerfile -t rust-ohos-x86_64 .
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
       - name: Build
         run: |
-          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace rust-ohos-x86_64 ./x86_64/build.sh
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e DRY_RUN="$DRY_RUN" \
+            rust-ohos-x86_64 ./x86_64/build.sh
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           path: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
           name: rust-1.89.0-aarch64-unknown-linux-ohos-cross
+          retention-days: 90
+
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'

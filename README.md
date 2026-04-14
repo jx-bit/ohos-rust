@@ -1,103 +1,157 @@
 # ohos-rust
 
-本项目为 OpenHarmony 平台编译了 rust，并发布预构建包。
+本项目为 OpenHarmony (鸿蒙) 平台编译 Rust 工具链，并发布预构建包。
+
+**当前版本**: Rust 1.89.0 | **目标平台**: `aarch64-unknown-linux-ohos`
 
 ## 获取预构建包
 
-前往 [release 页面](https://github.com/Harmonybrew/ohos-rust/releases) 获取。
+前往 [release 页面](https://github.com/Harmonybrew/ohos-rust/releases) 下载。
 
-## 用法
+## 安装使用
 
-**1\. 在鸿蒙 PC 中使用**
+### 方式一：在鸿蒙 PC 中使用
 
-在 HiShell 中用 curl 下载这个软件包，然后以"解压 + 配 PATH" 的方式使用。
-
-示例：
 ```sh
 cd ~
-curl -fLO https://github.com/Harmonybrew/ohos-rust/releases/download/1.89.0/rust-1.89.0-ohos-arm64.tar.gz
-tar -zxf rust-1.89.0-ohos-arm64.tar.gz
-export PATH=~/rust-1.89.0-ohos-arm64/bin:$PATH
+curl -fLO https://github.com/Harmonybrew/ohos-rust/releases/download/1.89.0/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+tar -zxf rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+export PATH=~/rust-1.89.0-aarch64-unknown-linux-ohos/usr/local/bin:$PATH
 
-# 现在可以使用 rust 命令了
+# 测试
+rustc --version
+cargo --version
 ```
 
-**2\. 在鸿蒙开发板中使用**
+### 方式二：在鸿蒙开发板中使用
 
-用 hdc 把它推到设备上，然后以"解压 + 配 PATH" 的方式使用。
-
-示例：
 ```sh
-hdc file send rust-1.89.0-ohos-arm64.tar.gz /data
+# 从 PC 推送到设备
+hdc file send rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz /data/local/tmp
+
+# 在设备上安装
 hdc shell
-
-cd /data
-tar -zxf rust-1.89.0-ohos-arm64.tar.gz
-export PATH=/data/rust-1.89.0-ohos-arm64/bin:$PATH
-
-# 现在可以使用 rust 命令了
+cd /data/local/tmp
+tar -zxf rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+export PATH=/data/local/tmp/rust-1.89.0-aarch64-unknown-linux-ohos/usr/local/bin:$PATH
 ```
 
-**3\. 在 [鸿蒙容器](https://github.com/hqzing/dockerharmony) 中使用**
+### 方式三：在鸿蒙容器中使用
 
-在容器中用 curl 下载这个软件包，然后以"解压 + 配 PATH" 的方式使用。
-
-示例：
-```sh
-cd /opt
-curl -fLO https://github.com/Harmonybrew/ohos-rust/releases/download/1.89.0/rust-1.89.0-ohos-arm64.tar.gz
-tar -zxf rust-1.89.0-ohos-arm64.tar.gz
-export PATH=/opt/rust-1.89.0-ohos-arm64/bin:$PATH
-
-# 现在可以使用 rust 命令了
-```
+参考 [dockerharmony](https://github.com/hqzing/dockerharmony) 项目。
 
 ## 从源码构建
 
-**1\. 手动构建**
+### 方式一：使用 GitHub Actions CI（推荐）
 
-这个项目使用本地编译（native compilation，也可以叫本机编译或原生编译）的做法来编译鸿蒙版 rust，而不是交叉编译。
+1. Fork 本项目
+2. 在 "Actions" 菜单启用工作流
+3. 推送代码或手动触发构建
 
-需要在 [鸿蒙容器](https://github.com/hqzing/dockerharmony) 中运行项目里的 build.sh，以实现 rust 的本地编译。
+**快速测试流程**：在 Actions 中选择 "Run workflow"，勾选 `dry_run` 选项，可跳过完整编译测试签名流程。
 
-示例：
+### 方式二：本地 Docker 构建（交叉编译）
+
 ```sh
 git clone https://github.com/Harmonybrew/ohos-rust.git
 cd ohos-rust
-docker run \
-  --rm \
-  -it \
-  -v "$PWD":/workdir \
-  -w /workdir \
-  ghcr.io/hqzing/dockerharmony:latest \
-  ./build.sh
+
+# 构建 Docker 镜像
+docker build -f x86_64/Dockerfile -t rust-ohos-x86_64 .
+
+# 运行构建
+docker run --rm -v "$PWD":/workspace -w /workspace rust-ohos-x86_64 ./x86_64/build.sh
+
+# 快速测试（DRY_RUN 模式）
+docker run --rm -v "$PWD":/workspace -w /workspace -e DRY_RUN=true rust-ohos-x86_64 ./x86_64/build.sh
 ```
 
-**2\. 使用流水线构建**
+### 构建选项
 
-如果你熟悉 GitHub Actions，你可以直接复用项目内的工作流配置，使用 GitHub 的流水线来完成构建。
+| 环境变量 | 默认值 | 说明 |
+|---------|-------|------|
+| `DRY_RUN` | `false` | 跳过编译，仅测试签名流程 |
+| `STRIP_BINARIES` | `false` | 移除调试符号减小体积 |
+| `SCCACHE_REMOTE` | `false` | 启用远程编译缓存 |
 
-这种情况下，你使用的是 GitHub 提供的构建机，不需要自己准备构建环境。
+**示例**：
+```sh
+# 带 strip 的完整构建
+docker run --rm -v "$PWD":/workspace -w /workspace \
+  -e STRIP_BINARIES=true \
+  rust-ohos-x86_64 ./x86_64/build.sh
+```
 
-只需要这么做，你就可以进行你的个人构建：
-1. Fork 本项目，生成个人仓
-2. 在个人仓的"Actions"菜单里面启用工作流
-3. 在个人仓提交代码或发版本，触发流水线运行
+## 目录结构
+
+```
+ohos-rust/
+├── x86_64/                    # x86_64 交叉编译配置
+│   ├── Dockerfile             # Docker 构建环境
+│   ├── build.sh               # 构建脚本
+│   └── scripts/               # 辅助脚本
+│       ├── ohos-sdk.sh        # OpenHarmony SDK 安装
+│       ├── ohos-openssl.sh    # OpenSSL 安装
+│       ├── sccache.sh         # 编译缓存工具
+│       └── ohos/              # Clang wrapper
+├── patches/                   # Rust 源码补丁
+├── tool/                      # 签名工具（打包到产物）
+├── install-manual.sh          # 手动安装脚本
+├── tmp/                       # 文档和临时文件
+│   ├── x86_64-ci-pipeline-detailed.md
+│   ├── ohos-rust-release-artifacts.md
+│   └── optimization-analysis.md
+└── .github/workflows/ci.yml   # GitHub Actions CI
+```
+
+## 技术细节
+
+### 编译策略
+
+本项目采用**交叉编译**方式：在 x86_64 Ubuntu Docker 环境中编译 `aarch64-unknown-linux-ohos` 目标。
+
+- **编译器**：OpenHarmony SDK 提供的 Clang (基于 LLVM 18)
+- **C 标准库**：musl libc（OHOS 使用 musl）
+- **SSL 库**：ohos-openssl（预构建 ARM64 版本）
+
+### 签名要求
+
+OpenHarmony 要求所有 ELF 二进制文件必须签名才能运行。本项目：
+1. 在构建时使用 `binary-sign-tool` 进行自签名 (`-selfSign 1`)
+2. 将签名工具打包到产物中，用户可在目标机器上重新签名
+
+**注意**：鸿蒙签名可能与文件路径绑定。如遇到签名失效，请使用产物中的 `tool/binary-sign-tool` 重新签名。
 
 ## 常见问题
 
-**1\. 部分 cargo crates 无法正常使用**
+### 1. 部分 cargo crates 无法正常使用
 
-本项目并没有对 rust 进行任何"鸿蒙适配"处理，仅仅是使用 ohos-sdk 进行了简单的重编译，它的业务逻辑是走 aarch64-linux-musl 平台的业务逻辑，下载的 crates（主要指包含 C 依赖的 crates）也是 aarch64-linux-musl 的 crates。
+本项目未对 Rust 进行"鸿蒙适配"，仅使用 OHOS SDK 重新编译。Rust 沿用 `aarch64-linux-musl` 的业务逻辑，下载的 crates 也是 musl 版本。
 
-基于鸿蒙对 Linux 的兼容性，很多 crates 是可以正常工作的。但并非所有 crates 都能被完美兼容，不可避免会遇到一些不能正常工作的 crates，这个表现是预期之内的。
+基于鸿蒙对 Linux 的兼容性，大多数 crates 可正常工作，但部分含 C 依赖的 crates 可能有问题。
 
-**2\. 软件包不能做到完全便携**
+### 2. 软件包路径问题
 
-rust 这个软件本身的设计没有刻意去实现 portable/relocatable，它编出来的制品里面有一些地方硬编码了编译时的 prefix，它会根据这个 prefix 去读取各种文件。如果软件的实际使用位置和 prefix 不一致，就有可能会产生一些预期之外的表现。
+Rust 编译时会硬编码 `prefix` 路径。本项目的 `prefix` 是 `/usr/local`。
 
-在基础的使用场景下，这个问题不会暴露出来，即使软件的实际使用位置和 prefix 不一致，我们也能正常使用 rustc、cargo 等命令。但在深度的使用场景下就很容易遇到这方面的问题。
+如遇到路径相关问题：
+- **方案一**：将产物中的 `usr/local` 目录移动到你期望的位置，并设置 `PATH`
+- **方案二**：修改 `install.sh` 的安装位置后重新打包
 
-如果你遇到了这方面的问题，有两种处理方案：
-1. 将软件包放置到 prefix 目录下使用。本项目编包的时候设置的 prefix 是 /opt/rust-1.89.0-ohos-arm64。
-2. 自己重新编一个包，将 prefix 设置成你期望的安装路径。
+### 3. CI 构建时间过长
+
+完整编译约需 60-120 分钟。优化措施：
+- Docker 层缓存（已实施）
+- sccache 编译缓存（已实施，支持远程缓存）
+- DRY_RUN 模式快速测试（已实施）
+
+如需启用远程 sccache 缓存，需配置 S3 兼容存储和 AWS 凭证。
+
+## 相关项目
+
+- [dockerharmony](https://github.com/hqzing/dockerharmony) - 鸿蒙开发容器
+- [ohos-openssl](https://github.com/Harmonybrew/ohos-openssl) - 鸿蒙版 OpenSSL
+
+## 许可证
+
+Rust 采用 Apache-2.0/MIT 双许可。本项目构建脚本采用 MIT 许可证。
