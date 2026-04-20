@@ -41,7 +41,14 @@ echo "=== 配置 Rust 构建 ==="
     --disable-docs \
     --tools=cargo,clippy,rustdocs,rustfmt,rust-analyzer,rust-analyzer-proc-macro-srv,analysis,src,wasm-component-ld \
     --enable-extended \
-    --enable-sanitizers
+    --enable-sanitizers \
+    --enable-cargo-native-static \
+    --set rust.rpath=true
+# --enable-cargo-native-static: 启用 Cargo 工具静态链接优化
+#   - 设置 LIBZ_SYS_STATIC=1 → libz 静态链接 (注: libz-sys 对 OHOS 有特殊处理，实际仍可能动态链接)
+#   - 启用 Cargo all-static feature → vendored-openssl + curl/static-curl + vendored-libgit2
+#   - 配合 Dockerfile 中的 OPENSSL_STATIC=1，确保 OpenSSL 静态链接
+# 注: configure.py 中通过 o() 定义的 flag 选项需使用 --enable-{name} 格式
 
 # ========================================
 # 完全模拟官方 CI 的构建步骤
