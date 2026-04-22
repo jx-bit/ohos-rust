@@ -233,6 +233,64 @@ cp $WORKDIR/tool/binary-sign-tool "$FINAL_DIR/tool/"
 
 tar -zcf rust-$RUST_VERSION-aarch64-unknown-linux-ohos.tar.gz rust-$RUST_VERSION-aarch64-unknown-linux-ohos
 
+# ========================================
+# 处理 rust-analyzer 独立包
+# ========================================
+echo "=== 处理 rust-analyzer 独立包 ==="
+RA_PACKAGE="rust-analyzer-$RUST_VERSION-aarch64-unknown-linux-ohos.tar.gz"
+if [ -f "rustc-$RUST_VERSION-src/build/dist/$RA_PACKAGE" ]; then
+    RA_INSTALL_DIR="/tmp/rust-analyzer-install"
+    rm -rf "$RA_INSTALL_DIR"
+    mkdir -p "$RA_INSTALL_DIR"
+
+    cd rustc-$RUST_VERSION-src/build/dist/
+    tar -zxf "$RA_PACKAGE"
+    # 进入解压后的目录
+    if [ -d "rust-analyzer-$RUST_VERSION-aarch64-unknown-linux-ohos" ]; then
+        cd rust-analyzer-$RUST_VERSION-aarch64-unknown-linux-ohos
+        
+        # 安装（提取）到临时目录
+        if [ -f "install.sh" ]; then
+            sh install.sh --prefix="$RA_INSTALL_DIR" --verbose
+        else
+            # 如果没有 install.sh，手动复制
+            mkdir -p "$RA_INSTALL_DIR/bin"
+            cp -r bin/* "$RA_INSTALL_DIR/bin/" 2>/dev/null || true
+        fi
+        
+        # 签名
+        cd "$RA_INSTALL_DIR"
+        echo "=== 签名 rust-analyzer ==="
+        find . -type f | while read -r FILE; do
+            if file -b "$FILE" | grep -qiE "elf"; then
+                echo "Signing RA: $FILE"
+                ORIG_PERM=$(stat -c %a "$FILE")
+                chmod +w "$FILE"
+                SIGNED_TMP="${FILE}.signed"
+                if "$SIGN_TOOL" sign -inFile "$FILE" -outFile "$SIGNED_TMP" -selfSign 1; then
+                    mv "$SIGNED_TMP" "$FILE"
+                    chmod "$ORIG_PERM" "$FILE"
+                else
+                    echo "✗ Failed to sign RA: $FILE"
+                    rm -f "$SIGNED_TMP"
+                    exit 1
+                fi
+            fi
+        done
+        [ $? -ne 0 ] && exit 1
+        
+        # 打包
+        cd $WORKDIR
+        tar -zcf "$RA_PACKAGE" -C "$RA_INSTALL_DIR" .
+        echo "=== rust-analyzer 独立包处理完成: $RA_PACKAGE ==="
+    else
+        echo "✗ 未找到解压后的 rust-analyzer 目录"
+    fi
+    cd $WORKDIR
+else
+    echo "!!! 未找到 $RA_PACKAGE，跳过 !!!"
+fi
+
 sync
 
 echo "=== 构建完成 ==="

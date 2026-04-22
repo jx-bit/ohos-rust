@@ -33,14 +33,14 @@ jobs:
   #         mkdir /__e/node24/bin
   #         tar -zxf node-v24.2.0-openharmony-arm64.tar.gz -C /opt
   #         ln -s /opt/node-v24.2.0-openharmony-arm64/bin/node /__e/node24/bin/node
-  #     - name: Checkout
-  #       uses: actions/checkout@v5
+      #     - name: Checkout
+      #       uses: actions/checkout@v4
   #     - name: Build
   #       run: |
   #         echo "=== ARM64 本地编译 aarch64-unknown-linux-ohos ==="
   #         ./arm64/build.sh
-  #     - name: Upload artifact
-  #       uses: actions/upload-artifact@v6
+      #     - name: Upload artifact
+      #       uses: actions/upload-artifact@v4
   #       with:
   #         path: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
   #         name: rust-1.89.0-aarch64-unknown-linux-ohos-native
@@ -55,7 +55,7 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -93,15 +93,26 @@ jobs:
             -e DRY_RUN="$DRY_RUN" \
             rust-ohos-x86_64 ./x86_64/build.sh
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v6
+      # 1. 上传全家桶（使用 原文件名+cross）
+      - name: Upload toolchain artifact
+        uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
           name: rust-1.89.0-aarch64-unknown-linux-ohos-cross
+          retention-days: 90
+
+      # 2. 上传独立 rust-analyzer（使用 原文件名+cross）
+      - name: Upload rust-analyzer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/rust-analyzer-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+          name: rust-analyzer-1.89.0-aarch64-unknown-linux-ohos-cross
           retention-days: 90
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'
         with:
-          files: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+          files: |
+            ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+            ${{ github.workspace }}/rust-analyzer-1.89.0-aarch64-unknown-linux-ohos.tar.gz
