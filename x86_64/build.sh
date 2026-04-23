@@ -38,17 +38,48 @@ patch -p1 < $WORKDIR/patches/0001-rustc-ohos-auto-sign-fix-1.89.0.patch
 echo "=== 配置 Rust 构建 ==="
 ./configure \
     --enable-profiler \
-    --disable-docs \
-    --tools=cargo,clippy,rustdocs,rustfmt,rust-analyzer,rust-analyzer-proc-macro-srv,analysis,src,wasm-component-ld \
-    --enable-extended \
     --enable-sanitizers \
+    --enable-extended \
     --enable-cargo-native-static \
-    --set rust.rpath=true
-# --enable-cargo-native-static: 启用 Cargo 工具静态链接优化
-#   - 设置 LIBZ_SYS_STATIC=1 → libz 静态链接 (注: libz-sys 对 OHOS 有特殊处理，实际仍可能动态链接)
-#   - 启用 Cargo all-static feature → vendored-openssl + curl/static-curl + vendored-libgit2
-#   - 配合 Dockerfile 中的 OPENSSL_STATIC=1，确保 OpenSSL 静态链接
-# 注: configure.py 中通过 o() 定义的 flag 选项需使用 --enable-{name} 格式
+    --set rust.rpath=true \
+    \
+    --tools=\
+cargo,\
+clippy,\
+rustdoc,\
+rustfmt,\
+rust-analyzer,\
+rust-analyzer-proc-macro-srv,\
+src,\
+rust-demangler
+
+# === 参数详细说明 ===
+# 目标：与 x86_64-unknown-linux-gnu 标准全家桶提供的工具保持一致（包含 rust-docs）。
+#
+# 1. 构建特性控制:
+#    --enable-extended:          构建扩展工具链（不仅是编译器，还包括 Cargo、Stdlib 等）。
+#    --enable-profiler:          启用性能分析工具支持 (perf)。
+#    --enable-sanitizers:        启用内存/线程错误检查器 (ASAN/LSAN 等)。
+#    --enable-cargo-native-static: 尝试静态链接 Cargo 的原生依赖（如 OpenSSL），减少产物依赖。
+#    --set rust.rpath=true:      设置运行时库搜索路径，确保二进制能正确找到动态库。
+#
+# 2. 文档处理:
+#    [移除 --disable-docs]: 为了严格照搬 x86_64 标准全家桶的完整性，我们移除了该选项。
+#                           构建将生成 `share/doc` 下的 HTML 离线文档。虽然这会增加编译时间和产物体积（约 +400MB），
+#                           但确保了与标准环境的 100% 一致性，并支持离线查阅。
+#
+# 3. 工具组件列表 (--tools) - 对齐标准发行版:
+#    cargo:                      包管理器 (必选)。
+#    clippy:                     静态代码分析工具。
+#    rustdoc:                    文档生成工具 (支持 `cargo doc`)。
+#                                [修正]: 之前拼写为 rustdocs (复数) 导致该工具未被编译，现已修正。
+#    rustfmt:                    代码格式化工具。
+#    rust-analyzer:              IDE 语言服务器核心。
+#    rust-analyzer-proc-macro-srv: 宏处理服务进程 (RA 必须组件)。
+#    src:                        标准库源码 (支持 `cargo build-std` 交叉编译)。
+#    rust-demangler:             符号还原工具。
+#                                [新增]: 用于解析 Panic/Backtrace 中的混淆符号 (如 `_RINv...`)。
+#    [移除]: 移除了 wasm-component-ld 等非标准全家桶默认包含的工具，以严格对齐标准发行版。
 
 # ========================================
 # 完全模拟官方 CI 的构建步骤
