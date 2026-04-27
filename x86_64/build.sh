@@ -2,7 +2,20 @@
 set -e
 
 WORKDIR=$(pwd)
-RUST_VERSION="1.89.0"
+
+# ========================================
+# 版本配置（可通过环境变量或命令行参数覆盖）
+# ========================================
+# 优先级: 命令行参数 > 环境变量 > 默认版本
+if [ -n "$1" ]; then
+    RUST_VERSION="$1"
+elif [ -n "$RUST_VERSION" ]; then
+    :
+else
+    RUST_VERSION="1.95.0"
+fi
+
+echo "=== 构建 Rust 版本: $RUST_VERSION ==="
 
 # ========================================
 # 构建选项（可通过环境变量覆盖）
@@ -29,7 +42,26 @@ cd rustc-$RUST_VERSION-src
 # 应用 patches
 # ========================================
 echo "=== 应用 patches ==="
-patch -p1 < $WORKDIR/patches/0001-rustc-ohos-auto-sign-fix-1.89.0.patch
+
+PATCH_DIR="$WORKDIR/patches/$RUST_VERSION"
+
+if [ ! -d "$PATCH_DIR" ]; then
+    echo "错误: 未找到版本 $RUST_VERSION 的 patches 目录"
+    echo "请创建目录: patches/$RUST_VERSION/"
+    echo "当前支持的版本:"
+    ls -d "$WORKDIR/patches/*/ " 2>/dev/null || echo "  (无)"
+    exit 1
+fi
+
+echo "Patches 目录: $PATCH_DIR"
+ls -la "$PATCH_DIR/"
+
+for PATCH_FILE in "$PATCH_DIR"/*.patch; do
+    if [ -f "$PATCH_FILE" ]; then
+        echo "应用 patch: $(basename "$PATCH_FILE")"
+        patch -p1 < "$PATCH_FILE"
+    fi
+done
 
 # ========================================
 # 完全模拟官方 CI 的 configure 步骤
@@ -41,6 +73,7 @@ echo "=== 配置 Rust 构建 ==="
     --enable-sanitizers \
     --enable-extended \
     --enable-cargo-native-static \
+    --disable-docs \
     --set rust.rpath=true \
     \
     --tools=\
@@ -54,32 +87,26 @@ src,\
 rust-demangler
 
 # === 参数详细说明 ===
-# 目标：与 x86_64-unknown-linux-gnu 标准全家桶提供的工具保持一致（包含 rust-docs）。
+# 目标：构建 OHOS 交叉编译工具链（在 x86_64 上编译，产物为 aarch64）
 #
 # 1. 构建特性控制:
 #    --enable-extended:          构建扩展工具链（不仅是编译器，还包括 Cargo、Stdlib 等）。
 #    --enable-profiler:          启用性能分析工具支持 (perf)。
 #    --enable-sanitizers:        启用内存/线程错误检查器 (ASAN/LSAN 等)。
 #    --enable-cargo-native-static: 尝试静态链接 Cargo 的原生依赖（如 OpenSSL），减少产物依赖。
+#    --disable-docs:             禁用文档生成。交叉编译时 host 工具（如 error_index_generator）
+#                               编译为 aarch64 格式，无法在 x86_64 上运行生成文档。
 #    --set rust.rpath=true:      设置运行时库搜索路径，确保二进制能正确找到动态库。
 #
-# 2. 文档处理:
-#    [移除 --disable-docs]: 为了严格照搬 x86_64 标准全家桶的完整性，我们移除了该选项。
-#                           构建将生成 `share/doc` 下的 HTML 离线文档。虽然这会增加编译时间和产物体积（约 +400MB），
-#                           但确保了与标准环境的 100% 一致性，并支持离线查阅。
-#
-# 3. 工具组件列表 (--tools) - 对齐标准发行版:
+# 2. 工具组件列表 (--tools) - 对齐标准发行版:
 #    cargo:                      包管理器 (必选)。
 #    clippy:                     静态代码分析工具。
 #    rustdoc:                    文档生成工具 (支持 `cargo doc`)。
-#                                [修正]: 之前拼写为 rustdocs (复数) 导致该工具未被编译，现已修正。
 #    rustfmt:                    代码格式化工具。
 #    rust-analyzer:              IDE 语言服务器核心。
 #    rust-analyzer-proc-macro-srv: 宏处理服务进程 (RA 必须组件)。
 #    src:                        标准库源码 (支持 `cargo build-std` 交叉编译)。
-#    rust-demangler:             符号还原工具。
-#                                [新增]: 用于解析 Panic/Backtrace 中的混淆符号 (如 `_RINv...`)。
-#    [移除]: 移除了 wasm-component-ld 等非标准全家桶默认包含的工具，以严格对齐标准发行版。
+#    rust-demangler:             符号还原工具，用于解析 Panic/Backtrace 中的混淆符号 (如 `_RINv...`)。
 
 # ========================================
 # 完全模拟官方 CI 的构建步骤

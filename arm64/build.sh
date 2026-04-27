@@ -2,7 +2,20 @@
 set -e
 
 WORKDIR=$(pwd)
-RUST_VERSION="1.89.0"
+
+# ========================================
+# 版本配置（可通过环境变量或命令行参数覆盖）
+# ========================================
+# 优先级: 命令行参数 > 环境变量 > 默认版本
+if [ -n "$1" ]; then
+    RUST_VERSION="$1"
+elif [ -n "$RUST_VERSION" ]; then
+    :
+else
+    RUST_VERSION="1.95.0"
+fi
+
+echo "=== 构建 Rust 版本: $RUST_VERSION ==="
 
 # 如果存在旧的目录和文件，就清理掉
 # 仅清理工作目录，不清理系统目录，因为默认用户每次使用新的容器进行构建（仓库中的构建指南是所以指导的）
@@ -138,7 +151,26 @@ cd rustc-$RUST_VERSION-src
 
 # 应用 patches
 echo "=== 应用 patches ==="
-patch -p1 < $WORKDIR/patches/0001-rustc-ohos-auto-sign-fix-1.89.0.patch
+
+PATCH_DIR="$WORKDIR/patches/$RUST_VERSION"
+
+if [ ! -d "$PATCH_DIR" ]; then
+    echo "错误: 未找到版本 $RUST_VERSION 的 patches 目录"
+    echo "请创建目录: patches/$RUST_VERSION/"
+    echo "当前支持的版本:"
+    ls -d "$WORKDIR/patches/*/ " 2>/dev/null || echo "  (无)"
+    exit 1
+fi
+
+echo "Patches 目录: $PATCH_DIR"
+ls -la "$PATCH_DIR/"
+
+for PATCH_FILE in "$PATCH_DIR"/*.patch; do
+    if [ -f "$PATCH_FILE" ]; then
+        echo "应用 patch: $(basename "$PATCH_FILE")"
+        patch -p1 < "$PATCH_FILE"
+    fi
+done
 
 # ========================================
 # 设置 stage0 预构建工具链

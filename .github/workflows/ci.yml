@@ -14,14 +14,29 @@ on:
         required: false
         default: false
         type: boolean
+      rust_version_select:
+        description: 'Rust version (select from list)'
+        required: false
+        default: '1.95.0'
+        type: choice
+        options:
+          - '1.95.0'
+          - '1.89.0'
+          - 'custom'
+      rust_version_custom:
+        description: 'Custom Rust version (only used when "custom" is selected above, e.g., 1.90.0)'
+        required: false
+        default: ''
+        type: string
 
 permissions: write-all
 
 jobs:
-  # build-on-arm64:
+# build-on-arm64:
   #   runs-on: ubuntu-24.04-arm
   #   env:
   #     FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  #     RUST_VERSION: ${{ github.event.inputs.rust_version || '' }}
   #   container:
   #     image: ghcr.io/hqzing/dockerharmony:latest
   #     volumes:
@@ -41,21 +56,45 @@ jobs:
   #         ./arm64/build.sh
       #     - name: Upload artifact
       #       uses: actions/upload-artifact@v4
-  #       with:
-  #         path: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
-  #         name: rust-1.89.0-aarch64-unknown-linux-ohos-native
+      #       with:
+  #         path: ${{ github.workspace }}/rust-${{ env.RUST_VERSION }}-aarch64-unknown-linux-ohos.tar.gz
+  #         name: rust-${{ env.RUST_VERSION }}-aarch64-unknown-linux-ohos-native
   #     - name: Upload release asset
   #       uses: softprops/action-gh-release@v2
   #       if: github.event_name == 'release'
   #       with:
-  #         files: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+  #         files: ${{ github.workspace }}/rust-${{ env.RUST_VERSION }}-aarch64-unknown-linux-ohos.tar.gz
   build-on-x86_64:
     runs-on: ubuntu-24.04
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    outputs:
+      rust_version: ${{ steps.version.outputs.rust_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Determine Rust version
+        id: version
+        run: |
+          SELECT="${{ github.event.inputs.rust_version_select || '1.95.0' }}"
+          CUSTOM="${{ github.event.inputs.rust_version_custom || '' }}"
+          
+          case "$SELECT" in
+            'custom')
+              if [ -z "$CUSTOM" ]; then
+                echo "Error: custom version selected but no custom version provided"
+                exit 1
+              fi
+              RUST_VER="$CUSTOM"
+              ;;
+            *)
+              RUST_VER="$SELECT"
+              ;;
+          esac
+          
+          echo "rust_version=$RUST_VER" >> $GITHUB_OUTPUT
+          echo "=== Building Rust version: $RUST_VER ==="
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -91,22 +130,23 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             -e DRY_RUN="$DRY_RUN" \
+            -e RUST_VERSION="${{ steps.version.outputs.rust_version }}" \
             rust-ohos-x86_64 ./x86_64/build.sh
 
-      # 1. 上传全家桶（使用 原文件名+cross）
+      # 1. 上传全家桶
       - name: Upload toolchain artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
-          name: rust-1.89.0-aarch64-unknown-linux-ohos-cross
+          path: ${{ github.workspace }}/rust-${{ steps.version.outputs.rust_version }}-aarch64-unknown-linux-ohos.tar.gz
+          name: rust-${{ steps.version.outputs.rust_version }}-aarch64-unknown-linux-ohos-cross
           retention-days: 90
 
-      # 2. 上传独立 rust-analyzer（使用 原文件名+cross）
+      # 2. 上传独立 rust-analyzer
       - name: Upload rust-analyzer artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/rust-analyzer-1.89.0-aarch64-unknown-linux-ohos.tar.gz
-          name: rust-analyzer-1.89.0-aarch64-unknown-linux-ohos-cross
+          path: ${{ github.workspace }}/rust-analyzer-${{ steps.version.outputs.rust_version }}-aarch64-unknown-linux-ohos.tar.gz
+          name: rust-analyzer-${{ steps.version.outputs.rust_version }}-aarch64-unknown-linux-ohos-cross
           retention-days: 90
 
       - name: Upload release asset
@@ -114,5 +154,5 @@ jobs:
         if: github.event_name == 'release'
         with:
           files: |
-            ${{ github.workspace }}/rust-1.89.0-aarch64-unknown-linux-ohos.tar.gz
-            ${{ github.workspace }}/rust-analyzer-1.89.0-aarch64-unknown-linux-ohos.tar.gz
+            ${{ github.workspace }}/rust-${{ steps.version.outputs.rust_version }}-aarch64-unknown-linux-ohos.tar.gz
+            ${{ github.workspace }}/rust-analyzer-${{ steps.version.outputs.rust_version }}-aarch64-unknown-linux-ohos.tar.gz
